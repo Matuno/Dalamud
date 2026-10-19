@@ -27,6 +27,8 @@ internal abstract class FontHandle : IFontHandle
     private readonly List<IDisposable> pushedFonts = new(8);
 
     private IFontHandleManager? manager;
+    // The render queue owns the lock; this cache must not retain an abandoned frame's atlas.
+    private WeakReference<LockedImFont>? postFrameFont;
     private long lastCumulativePresentCalls;
 
     /// <summary>
@@ -101,6 +103,15 @@ internal abstract class FontHandle : IFontHandle
     /// </remarks>
     public ImFontPtr LockUntilPostFrame()
     {
+        if (ThreadSafety.IsMainThread
+            && this.postFrameFont is { } previous
+            && previous.TryGetTarget(out var cached)
+            && !cached.ImFont.IsNull
+            && this.manager?.Substance is { } substance
+            && cached.IsOwnedBy(substance.DataRoot)
+            && cached.ImFont == substance.GetFontPtr(this))
+            return cached.ImFont;
+
         if (this.TryLock(out _) is not { } locked)
             return default;
 
@@ -128,6 +139,14 @@ internal abstract class FontHandle : IFontHandle
         }
 
         Service<InterfaceManager>.Get().EnqueueDeferredDispose(locked);
+        if (ThreadSafety.IsMainThread)
+        {
+            if (this.postFrameFont is { } previousFrame)
+                previousFrame.SetTarget((LockedImFont)locked);
+            else
+                this.postFrameFont = new((LockedImFont)locked);
+        }
+
         return locked.ImFont;
     }
 
@@ -219,12 +238,7 @@ internal abstract class FontHandle : IFontHandle
             }
         }
 
-        var font = default(ImFontPtr);
-        if (this.TryLock(out _) is { } locked)
-        {
-            font = locked.ImFont;
-            Service<InterfaceManager>.Get().EnqueueDeferredDispose(locked);
-        }
+        var font = this.LockUntilPostFrame();
 
         var rented = SimplePushedFont.Rent(this.pushedFonts, font);
         this.pushedFonts.Add(rented);
@@ -260,6 +274,8 @@ internal abstract class FontHandle : IFontHandle
         {
             if (Interlocked.Exchange(ref this.manager, null) is not { } managerToDisassociate)
                 return;
+
+            this.postFrameFont = null;
 
             if (this.pushedFonts.Count > 0)
                 Log.Warning($"{nameof(IFontHandle)}.{nameof(IDisposable.Dispose)}: fonts were still in a stack.");

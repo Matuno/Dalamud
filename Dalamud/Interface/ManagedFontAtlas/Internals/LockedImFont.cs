@@ -48,6 +48,11 @@ internal class LockedImFont : ILockedImFont
         GC.SuppressFinalize(this);
     }
 
+    /// <summary>Tests whether this lock still holds a reference to the specified owner.</summary>
+    /// <param name="candidate">The owner to compare.</param>
+    /// <returns>Whether this lock still holds that owner.</returns>
+    internal bool IsOwnedBy(IRefCountable candidate) => ReferenceEquals(this.owner, candidate);
+
     private void FreeOwner()
     {
         if (this.owner is null)
