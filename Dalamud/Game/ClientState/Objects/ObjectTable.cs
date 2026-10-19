@@ -93,12 +93,16 @@ internal sealed partial class ObjectTable : IServiceType, IObjectTable
     }
 
     /// <inheritdoc/>
-    public IGameObject? SearchById(ulong gameObjectId)
+    public unsafe IGameObject? SearchById(ulong gameObjectId)
     {
         ThreadSafety.AssertMainThread();
 
         if (gameObjectId is 0)
             return null;
+
+        var manager = CSGameObjectManager.Instance();
+        if (manager is not null && this.SearchSortedObjects(manager->Objects.GameObjectIdSorted, manager->Objects.GameObjectIdSortedCount, gameObjectId, false) is { } match)
+            return match;
 
         foreach (var e in this.cachedObjectTable)
         {
@@ -110,12 +114,16 @@ internal sealed partial class ObjectTable : IServiceType, IObjectTable
     }
 
     /// <inheritdoc/>
-    public IGameObject? SearchByEntityId(uint entityId)
+    public unsafe IGameObject? SearchByEntityId(uint entityId)
     {
         ThreadSafety.AssertMainThread();
 
         if (entityId is 0 or 0xE0000000)
             return null;
+
+        var manager = CSGameObjectManager.Instance();
+        if (manager is not null && this.SearchSortedObjects(manager->Objects.EntityIdSorted, manager->Objects.EntityIdSortedCount, entityId, true) is { } match)
+            return match;
 
         foreach (var e in this.cachedObjectTable)
         {
@@ -159,6 +167,42 @@ internal sealed partial class ObjectTable : IServiceType, IObjectTable
             ObjectKind.Ornament => new Npc(address),
             _ => new GameObject(address),
         };
+    }
+
+    private unsafe GameObject? SearchSortedObjects(ReadOnlySpan<Pointer<CSGameObject>> objects, int count, ulong id, bool useEntityId)
+    {
+        if ((uint)count > (uint)objects.Length)
+            return null;
+
+        var low = 0;
+        var high = count - 1;
+        while (low <= high)
+        {
+            var middle = (low + high) / 2;
+            var address = objects[middle].Value;
+            if (address is null)
+                return null;
+
+            var objectId = useEntityId ? address->EntityId : (ulong)address->GetGameObjectId();
+            if (objectId < id)
+            {
+                low = middle + 1;
+            }
+            else if (objectId > id)
+            {
+                high = middle - 1;
+            }
+            else
+            {
+                // Sorted tables may lag slot changes; only use the existing wrapper for the same pointer.
+                var index = address->ObjectIndex;
+                return index < this.cachedObjectTable.Length && this.cachedObjectTable[index].Address == address
+                           ? this.cachedObjectTable[index].Update()
+                           : null;
+            }
+        }
+
+        return null;
     }
 
     private IEnumerable<IBattleChara> GetPlayerObjects()
