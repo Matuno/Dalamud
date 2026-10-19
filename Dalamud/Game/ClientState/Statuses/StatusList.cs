@@ -171,8 +171,13 @@ public sealed partial class StatusList : IReadOnlyCollection<IStatus>, ICollecti
         {
             while (++this.index < statusList.Length)
             {
-                var status = statusList[this.index];
-                if (status != null && status.StatusId != 0)
+                var address = statusList.GetStatusAddress(this.index);
+                if (address == 0)
+                    continue;
+
+                // Keep empty slots unboxed; only statuses returned to the caller need an interface wrapper.
+                var status = new Status(address);
+                if (status.StatusId != 0)
                 {
                     this.Current = status;
                     return true;
