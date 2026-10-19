@@ -1,5 +1,4 @@
 using System.Collections.Generic;
-using System.Linq;
 
 using Dalamud.IoC;
 using Dalamud.IoC.Internal;
@@ -119,20 +118,36 @@ internal sealed class Condition : IInternalDisposableService, ICondition
     /// <inheritdoc/>
     public bool AnyExcept(params ConditionFlag[] excluded)
     {
-        return !this.AsReadOnlySet().Intersect(excluded).Any();
+        ArgumentNullException.ThrowIfNull(excluded);
+        return !this.Any(excluded);
     }
 
     /// <inheritdoc/>
     public bool OnlyAny(params ConditionFlag[] other)
     {
-        return !this.AsReadOnlySet().Except(other).Any();
+        ArgumentNullException.ThrowIfNull(other);
+
+        for (var i = 0; i < MaxConditionEntries; i++)
+        {
+            if (this[i] && Array.IndexOf(other, (ConditionFlag)i) < 0)
+                return false;
+        }
+
+        return true;
     }
 
     /// <inheritdoc/>
     public bool EqualTo(params ConditionFlag[] other)
     {
-        var resultSet = this.AsReadOnlySet();
-        return resultSet.SetEquals(other);
+        ArgumentNullException.ThrowIfNull(other);
+
+        foreach (var flag in other)
+        {
+            if (!this[flag])
+                return false;
+        }
+
+        return this.OnlyAny(other);
     }
 
     private void Dispose(bool disposing)
