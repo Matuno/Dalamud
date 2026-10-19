@@ -2,7 +2,6 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
 using System.Runtime.CompilerServices;
-using System.Text;
 using System.Threading;
 
 using Dalamud.Game.Addon.Lifecycle.AddonArgTypes;
@@ -168,9 +167,7 @@ internal unsafe class AddonLifecycle : IInternalDisposableService
         }
 
         // Handle listeners that are listening for this addon and event type specifically
-        Span<char> nameBuffer = stackalloc char[32];
-        var nameLength = Encoding.UTF8.GetChars(args.AddonNameSpan, nameBuffer);
-        if (addonListeners.GetAlternateLookup<ReadOnlySpan<char>>().TryGetValue(nameBuffer[..nameLength], out var addonListener))
+        if (addonListeners.TryGetValue(args.AddonName, out var addonListener))
         {
             foreach (var listener in addonListener)
             {
