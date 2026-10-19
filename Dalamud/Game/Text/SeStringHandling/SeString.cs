@@ -97,10 +97,32 @@ public class SeString
     {
         get
         {
-            return this.Payloads
-                       .Where(p => p is ITextProvider)
-                       .Cast<ITextProvider>()
-                       .Aggregate(new StringBuilder(), (sb, tp) => sb.Append(tp.Text), sb => sb.ToString());
+            string? first = null;
+            StringBuilder? builder = null;
+            foreach (var payload in this.Payloads)
+            {
+                if (payload is not ITextProvider textProvider)
+                    continue;
+                var text = textProvider.Text;
+                if (string.IsNullOrEmpty(text))
+                    continue;
+                if (first is null)
+                {
+                    first = text;
+                }
+                else
+                {
+                    if (builder is null)
+                    {
+                        builder = new StringBuilder(first.Length + text.Length);
+                        builder.Append(first);
+                    }
+
+                    builder.Append(text);
+                }
+            }
+
+            return builder?.ToString() ?? first ?? string.Empty;
         }
     }
 
