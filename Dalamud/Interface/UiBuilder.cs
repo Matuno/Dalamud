@@ -904,14 +904,14 @@ public sealed class UiBuilder : IDisposable, IUiBuilder
 
         public void Pop() => this.WrappedNotDisposed.Pop();
 
-        public Task<IFontHandle> WaitAsync() =>
-            this.wrapped?.WaitAsync().ContinueWith(_ => (IFontHandle)this)
-            ?? Task.FromException<IFontHandle>(new ObjectDisposedException(nameof(FontHandleWrapper)));
+        public Task<IFontHandle> WaitAsync() => this.WaitAsync(CancellationToken.None);
 
-        public Task<IFontHandle> WaitAsync(CancellationToken cancellationToken) =>
-            this.wrapped?.WaitAsync(cancellationToken)
-                .ContinueWith(_ => (IFontHandle)this, cancellationToken)
-            ?? Task.FromException<IFontHandle>(new ObjectDisposedException(nameof(FontHandleWrapper)));
+        public async Task<IFontHandle> WaitAsync(CancellationToken cancellationToken)
+        {
+            await this.WrappedNotDisposed.WaitAsync(cancellationToken).ConfigureAwait(false);
+            cancellationToken.ThrowIfCancellationRequested();
+            return this;
+        }
 
         public override string ToString() =>
             $"{nameof(FontHandleWrapper)}({this.wrapped?.ToString() ?? "disposed"})";
