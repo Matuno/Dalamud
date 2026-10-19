@@ -156,7 +156,7 @@ internal class CallGateChannel
     /// Set the context for the invocations through this channel.
     /// </summary>
     /// <param name="ipcContext">The context to set.</param>
-    internal void SetInvocationContext(IpcContext ipcContext)
+    internal void SetInvocationContext(IpcContext? ipcContext)
     {
         this.ipcExecutionContext.Value = ipcContext;
     }
@@ -168,14 +168,6 @@ internal class CallGateChannel
     internal IpcContext? GetInvocationContext()
     {
         return this.ipcExecutionContext.IsValueCreated ? this.ipcExecutionContext.Value : null;
-    }
-
-    /// <summary>
-    /// Clear the context for this channel.
-    /// </summary>
-    internal void ClearInvocationContext()
-    {
-        this.ipcExecutionContext.Value = null;
     }
 
     private void CheckAndConvertArgs(object?[]? args, MethodInfo methodInfo)

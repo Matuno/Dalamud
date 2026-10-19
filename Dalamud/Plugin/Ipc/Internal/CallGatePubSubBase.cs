@@ -1,5 +1,3 @@
-using System.Reactive.Disposables;
-
 using Dalamud.Plugin.Internal.Types;
 using Dalamud.Plugin.Ipc.Exceptions;
 
@@ -126,9 +124,14 @@ internal abstract class CallGatePubSubBase
     /// <seealso cref="UnregisterAction"/>
     private protected void InvokeAction(params object?[]? args)
     {
-        using (this.BuildContext())
+        var previousContext = this.PushContext();
+        try
         {
             this.Channel.InvokeAction(args);
+        }
+        finally
+        {
+            this.Channel.SetInvocationContext(previousContext);
         }
     }
 
@@ -146,9 +149,14 @@ internal abstract class CallGatePubSubBase
     /// <seealso cref="UnregisterFunc"/>
     private protected TRet InvokeFunc<TRet>(params object?[]? args)
     {
-        using (this.BuildContext())
+        var previousContext = this.PushContext();
+        try
         {
             return this.Channel.InvokeFunc<TRet>(args);
+        }
+        finally
+        {
+            this.Channel.SetInvocationContext(previousContext);
         }
     }
 
@@ -163,13 +171,14 @@ internal abstract class CallGatePubSubBase
     private protected void SendMessage(params object?[]? args)
         => this.Channel.SendMessage(args);
 
-    private IDisposable BuildContext()
+    private IpcContext? PushContext()
     {
+        var previousContext = this.Channel.GetInvocationContext();
         this.Channel.SetInvocationContext(new IpcContext
         {
             SourcePlugin = this.OwningPlugin != null ? new ExposedPlugin(this.OwningPlugin) : null,
         });
 
-        return Disposable.Create(() => { this.Channel.ClearInvocationContext(); });
+        return previousContext;
     }
 }
