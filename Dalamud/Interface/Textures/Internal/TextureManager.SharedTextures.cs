@@ -161,7 +161,7 @@ internal sealed partial class TextureManager
         /// <inheritdoc cref="ITextureProvider.GetFromFile(string)"/>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public SharedImmediateTexture.PureImpl GetFromFile(string path) =>
-            this.NonDisposed.GetFromFile(new FileInfo(path));
+            this.NonDisposed.GetFromFileAbsolute(Path.GetFullPath(path));
 
         /// <inheritdoc cref="ITextureProvider.GetFromFile(FileInfo)"/>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
