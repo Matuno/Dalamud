@@ -211,18 +211,15 @@ internal sealed class Framework : IInternalDisposableService, IFramework
         if (cancellationToken == default)
             cancellationToken = this.FrameworkThreadTaskFactory.CancellationToken;
 
-        if (delay == default && delayTicks == default)
-            return Task.CompletedTask.ContinueWith(_ => func(), cancellationToken, TaskContinuationOptions.HideScheduler, this.frameworkThreadTaskScheduler);
+        Task wait;
+        if (delay == default)
+            wait = this.DelayTicks(delayTicks, cancellationToken);
+        else if (delayTicks == default)
+            wait = Task.Delay(delay, cancellationToken);
+        else
+            wait = Task.WhenAll(Task.Delay(delay, cancellationToken), this.DelayTicks(delayTicks, cancellationToken));
 
-        return this.FrameworkThreadTaskFactory.ContinueWhenAll(
-            [
-                Task.Delay(delay, cancellationToken),
-                this.DelayTicks(delayTicks, cancellationToken),
-            ],
-            _ => func(),
-            cancellationToken,
-            TaskContinuationOptions.HideScheduler,
-            this.frameworkThreadTaskScheduler);
+        return wait.ContinueWith(_ => func(), cancellationToken, TaskContinuationOptions.HideScheduler, this.frameworkThreadTaskScheduler);
     }
 
     /// <inheritdoc/>
@@ -239,18 +236,15 @@ internal sealed class Framework : IInternalDisposableService, IFramework
         if (cancellationToken == default)
             cancellationToken = this.FrameworkThreadTaskFactory.CancellationToken;
 
-        if (delay == default && delayTicks == default)
-            return Task.CompletedTask.ContinueWith(_ => action(), cancellationToken, TaskContinuationOptions.HideScheduler, this.frameworkThreadTaskScheduler);
+        Task wait;
+        if (delay == default)
+            wait = this.DelayTicks(delayTicks, cancellationToken);
+        else if (delayTicks == default)
+            wait = Task.Delay(delay, cancellationToken);
+        else
+            wait = Task.WhenAll(Task.Delay(delay, cancellationToken), this.DelayTicks(delayTicks, cancellationToken));
 
-        return this.FrameworkThreadTaskFactory.ContinueWhenAll(
-            [
-                Task.Delay(delay, cancellationToken),
-                this.DelayTicks(delayTicks, cancellationToken),
-            ],
-            _ => action(),
-            cancellationToken,
-            TaskContinuationOptions.HideScheduler,
-            this.frameworkThreadTaskScheduler);
+        return wait.ContinueWith(_ => action(), cancellationToken, TaskContinuationOptions.HideScheduler, this.frameworkThreadTaskScheduler);
     }
 
     /// <inheritdoc/>
@@ -267,18 +261,15 @@ internal sealed class Framework : IInternalDisposableService, IFramework
         if (cancellationToken == default)
             cancellationToken = this.FrameworkThreadTaskFactory.CancellationToken;
 
-        if (delay == default && delayTicks == default)
-            return Task.CompletedTask.ContinueWith(_ => func(), cancellationToken, TaskContinuationOptions.HideScheduler, this.frameworkThreadTaskScheduler).Unwrap();
+        Task wait;
+        if (delay == default)
+            wait = this.DelayTicks(delayTicks, cancellationToken);
+        else if (delayTicks == default)
+            wait = Task.Delay(delay, cancellationToken);
+        else
+            wait = Task.WhenAll(Task.Delay(delay, cancellationToken), this.DelayTicks(delayTicks, cancellationToken));
 
-        return this.FrameworkThreadTaskFactory.ContinueWhenAll(
-            [
-                Task.Delay(delay, cancellationToken),
-                this.DelayTicks(delayTicks, cancellationToken),
-            ],
-            _ => func(),
-            cancellationToken,
-            TaskContinuationOptions.HideScheduler,
-            this.frameworkThreadTaskScheduler).Unwrap();
+        return wait.ContinueWith(_ => func(), cancellationToken, TaskContinuationOptions.HideScheduler, this.frameworkThreadTaskScheduler).Unwrap();
     }
 
     /// <inheritdoc/>
@@ -295,18 +286,15 @@ internal sealed class Framework : IInternalDisposableService, IFramework
         if (cancellationToken == default)
             cancellationToken = this.FrameworkThreadTaskFactory.CancellationToken;
 
-        if (delay == default && delayTicks == default)
-            return Task.CompletedTask.ContinueWith(_ => func(), cancellationToken, TaskContinuationOptions.HideScheduler, this.frameworkThreadTaskScheduler).Unwrap();
+        Task wait;
+        if (delay == default)
+            wait = this.DelayTicks(delayTicks, cancellationToken);
+        else if (delayTicks == default)
+            wait = Task.Delay(delay, cancellationToken);
+        else
+            wait = Task.WhenAll(Task.Delay(delay, cancellationToken), this.DelayTicks(delayTicks, cancellationToken));
 
-        return this.FrameworkThreadTaskFactory.ContinueWhenAll(
-            [
-                Task.Delay(delay, cancellationToken),
-                this.DelayTicks(delayTicks, cancellationToken),
-            ],
-            _ => func(),
-            cancellationToken,
-            TaskContinuationOptions.HideScheduler,
-            this.frameworkThreadTaskScheduler).Unwrap();
+        return wait.ContinueWith(_ => func(), cancellationToken, TaskContinuationOptions.HideScheduler, this.frameworkThreadTaskScheduler).Unwrap();
     }
 
     /// <inheritdoc/>
