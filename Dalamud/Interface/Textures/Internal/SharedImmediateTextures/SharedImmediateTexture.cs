@@ -209,24 +209,11 @@ internal abstract class SharedImmediateTexture
         this.IsOpportunistic = false;
         this.LatestRequestedTick = Environment.TickCount64;
         var uw = this.UnderlyingWrap;
-        if (cancellationToken != default)
-        {
-            while (!uw.IsCompleted)
-            {
-                if (cancellationToken.IsCancellationRequested)
-                {
-                    this.Release();
-                    throw new OperationCanceledException(cancellationToken);
-                }
-
-                await Task.WhenAny(uw, Task.Delay(1000000, cancellationToken));
-            }
-        }
 
         IDalamudTextureWrap dtw;
         try
         {
-            dtw = await uw;
+            dtw = await uw.WaitAsync(cancellationToken);
         }
         catch
         {
