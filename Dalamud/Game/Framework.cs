@@ -516,6 +516,7 @@ internal class FrameworkPluginScoped : IInternalDisposableService, IFramework
 {
     private readonly LocalPlugin plugin;
     private readonly PluginErrorHandler pluginErrorHandler;
+    private readonly Action<Exception, string> updateErrorHandler;
 
     [ServiceManager.ServiceDependency]
     private readonly Framework frameworkService = Service<Framework>.Get();
@@ -529,6 +530,11 @@ internal class FrameworkPluginScoped : IInternalDisposableService, IFramework
     {
         this.plugin = plugin;
         this.pluginErrorHandler = pluginErrorHandler;
+        this.updateErrorHandler = (ex, handlerName) =>
+        {
+            Serilog.Log.Error(ex, $"[{this.plugin.InternalName}] Exception in event handler {{EventHandlerName}}", handlerName);
+            this.pluginErrorHandler.NotifyError();
+        };
 
         this.frameworkService.Update += this.OnUpdateForward;
     }
@@ -620,10 +626,6 @@ internal class FrameworkPluginScoped : IInternalDisposableService, IFramework
 
     private void OnUpdateForward(IFramework framework)
     {
-        this.frameworkService.ProfileAndInvoke(this.Update, this, (ex, handlerName) =>
-        {
-            Serilog.Log.Error(ex, $"[{this.plugin.InternalName}] Exception in event handler {{EventHandlerName}}", handlerName);
-            this.pluginErrorHandler.NotifyError();
-        });
+        this.frameworkService.ProfileAndInvoke(this.Update, this, this.updateErrorHandler);
     }
 }
