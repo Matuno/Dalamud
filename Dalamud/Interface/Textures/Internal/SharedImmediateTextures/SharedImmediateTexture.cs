@@ -26,8 +26,11 @@ internal abstract class SharedImmediateTexture
     private readonly Lock reviveLock = new();
     private readonly Lock ownerPluginsLock = new();
     private readonly List<LocalPlugin> ownerPlugins = [];
+    private readonly FrameReference frameReference;
 
     private bool resourceReleased;
+    // Only main-thread lookups and the post-render drain access this flag.
+    private bool frameReferenceQueued;
     private int refCount;
     private long selfReferenceExpiry;
     private CancellationTokenSource? cancellationTokenSource;
@@ -47,6 +50,7 @@ internal abstract class SharedImmediateTexture
         this.resourceReleased = true;
         this.FirstRequestedTick = this.LatestRequestedTick = Environment.TickCount64;
         this.PublicUseInstance = new(this);
+        this.frameReference = new(this);
     }
 
     /// <summary>Gets a wrapper for this instance which disables resource reference management.</summary>
@@ -358,8 +362,16 @@ internal abstract class SharedImmediateTexture
             if (exp == SelfReferenceExpiryExpired)
                 _ = this.AddRef();
 
-            // Release the reference for rendering, after rendering ImGui.
-            Service<InterfaceManager>.Get().EnqueueDeferredDispose(this);
+            // Keep one reference through the render drain; retain the transient reference until renewal is done.
+            if (this.frameReferenceQueued)
+            {
+                _ = this.Release();
+            }
+            else
+            {
+                Service<InterfaceManager>.Get().EnqueueDeferredDispose(this.frameReference);
+                this.frameReferenceQueued = true;
+            }
 
             var uw = this.UnderlyingWrap;
             if (uw?.IsCompletedSuccessfully is true)
@@ -413,6 +425,15 @@ internal abstract class SharedImmediateTexture
 
         /// <inheritdoc/>
         public override string ToString() => $"{this.inner}({nameof(PureImpl)})";
+    }
+
+    private sealed class FrameReference(SharedImmediateTexture owner) : IDisposable
+    {
+        public void Dispose()
+        {
+            owner.frameReferenceQueued = false;
+            _ = owner.Release();
+        }
     }
 
     /// <summary>Same with <see cref="DisposeSuppressingTextureWrap"/>, but with a custom implementation of
