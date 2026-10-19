@@ -572,6 +572,13 @@ internal partial class InterfaceManager : IInternalDisposableService
         return im;
     }
 
+    private static void RunRenderQueue(ConcurrentQueue<Action> queue)
+    {
+        // Leave jobs queued during this phase for the next frame so producers cannot extend the drain indefinitely.
+        for (var pending = queue.Count; pending > 0 && queue.TryDequeue(out var action); --pending)
+            action.InvokeSafely();
+    }
+
     private void OnLogin()
     {
         var player = Service<Game.Player.PlayerState>.GetNullable();
@@ -659,8 +666,7 @@ internal partial class InterfaceManager : IInternalDisposableService
         this.CumulativePresentCalls++;
         this.IsMainThreadInPresent = true;
 
-        while (this.runBeforeImGuiRender.TryDequeue(out var action))
-            action.InvokeSafely();
+        RunRenderQueue(this.runBeforeImGuiRender);
 
         // Enable viewports if there are no issues.
         var viewportsEnable = this.dalamudConfiguration.IsDisableViewport ||
@@ -821,8 +827,7 @@ internal partial class InterfaceManager : IInternalDisposableService
 
     private void PostImGuiRender()
     {
-        while (this.runAfterImGuiRender.TryDequeue(out var action))
-            action.InvokeSafely();
+        RunRenderQueue(this.runAfterImGuiRender);
 
         if (!this.deferredDisposeTextures.IsEmpty)
         {
