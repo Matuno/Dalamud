@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using System.IO;
+using System.Text;
 
 using Dalamud.Game.Text.SeStringHandling.Payloads;
 
@@ -87,6 +88,17 @@ public abstract partial class Payload
         }
 
         return this.encodedData;
+    }
+
+    /// <summary>Decodes plain text and preserves its original encoded bytes.</summary>
+    /// <param name="data">The text bytes, without a payload start marker.</param>
+    /// <returns>The decoded text payload.</returns>
+    internal static TextPayload DecodeText(ReadOnlySpan<byte> data)
+    {
+        var payload = new TextPayload(Encoding.UTF8.GetString(data));
+        payload.encodedData = data.ToArray();
+        payload.Dirty = false;
+        return payload;
     }
 
     /// <summary>
