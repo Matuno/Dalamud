@@ -130,7 +130,7 @@ internal sealed partial class TextureManager
         /// <inheritdoc cref="ITextureProvider.GetFromGameIcon"/>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public SharedImmediateTexture.PureImpl GetFromGameIcon(in GameIconLookup lookup) =>
-            this.NonDisposed.GetFromGame(this.lookupCache.GetOrAdd(lookup, this.GetIconPathByValue));
+            this.NonDisposed.GetFromGame(this.lookupCache.GetOrAdd(lookup, static (key, manager) => manager.GetIconPathByValue(key), this));
 
         /// <inheritdoc cref="ITextureProvider.TryGetFromGameIcon"/>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]

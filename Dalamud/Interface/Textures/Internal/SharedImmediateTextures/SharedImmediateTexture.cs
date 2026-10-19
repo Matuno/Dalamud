@@ -247,11 +247,12 @@ internal abstract class SharedImmediateTexture
             {
                 this.ownerPlugins.Add(plugin);
                 this.UnderlyingWrap?.ContinueWith(
-                    r =>
+                    static (r, state) =>
                     {
                         if (r.IsCompletedSuccessfully)
-                            Service<TextureManager>.Get().Blame(r.Result, plugin);
+                            Service<TextureManager>.Get().Blame(r.Result, (LocalPlugin)state!);
                     },
+                    plugin,
                     default(CancellationToken));
             }
         }
