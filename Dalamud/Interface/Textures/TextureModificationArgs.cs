@@ -90,7 +90,7 @@ public record struct TextureModificationArgs()
     /// change the underlying data of a texture.</returns>
     internal bool IsCompleteSourceCopy(in D3D11_TEXTURE2D_DESC desc) =>
         this.Uv0 == Vector2.Zero
-        && this.Uv1 == Vector2.One
+        && this.Uv1Effective == Vector2.One
         && (this.NewWidth == 0 || this.NewWidth == desc.Width)
         && (this.NewHeight == 0 || this.NewHeight == desc.Height)
         && !this.MakeOpaque

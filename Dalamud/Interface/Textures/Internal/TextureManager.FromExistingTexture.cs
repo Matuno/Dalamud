@@ -207,139 +207,149 @@ internal sealed partial class TextureManager
         return await this.GetAllRawImagesAsync(wrapAux, cancellationToken);
     }
 
+    private static unsafe ComPtr<ID3D11Texture2D> CreateReadbackTexture(ComPtr<ID3D11Texture2D> tex2D, bool allSubresources)
+    {
+        var desc = tex2D.GetDesc();
+        if ((desc.CPUAccessFlags & (uint)D3D11_CPU_ACCESS_FLAG.D3D11_CPU_ACCESS_READ) != 0)
+            return new(tex2D);
+
+        using var device = default(ComPtr<ID3D11Device>);
+        tex2D.Get()->GetDevice(device.GetAddressOf());
+        using var readback = device.CreateTexture2D(
+            desc with
+            {
+                MipLevels = allSubresources ? desc.MipLevels : 1,
+                ArraySize = allSubresources ? desc.ArraySize : 1,
+                SampleDesc = new(1, 0),
+                Usage = D3D11_USAGE.D3D11_USAGE_STAGING,
+                BindFlags = 0u,
+                CPUAccessFlags = (uint)D3D11_CPU_ACCESS_FLAG.D3D11_CPU_ACCESS_READ,
+                MiscFlags = 0u,
+            });
+        using var context = default(ComPtr<ID3D11DeviceContext>);
+        device.Get()->GetImmediateContext(context.GetAddressOf());
+        if (allSubresources)
+            context.Get()->CopyResource((ID3D11Resource*)readback.Get(), (ID3D11Resource*)tex2D.Get());
+        else
+            context.Get()->CopySubresourceRegion((ID3D11Resource*)readback.Get(), 0, 0, 0, 0, (ID3D11Resource*)tex2D.Get(), 0, null);
+        return new(readback);
+    }
+
+    private static unsafe (RawImageSpecification Specification, byte[] RawData)? TryReadSubresource(
+        ComPtr<ID3D11Texture2D> tex2D,
+        uint subresource,
+        D3D11_TEXTURE2D_DESC desc,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        using var device = default(ComPtr<ID3D11Device>);
+        tex2D.Get()->GetDevice(device.GetAddressOf());
+        using var context = default(ComPtr<ID3D11DeviceContext>);
+        device.Get()->GetImmediateContext(context.GetAddressOf());
+
+        D3D11_MAPPED_SUBRESOURCE mapped;
+        var resource = (ID3D11Resource*)tex2D.Get();
+        var result = context.Get()->Map(
+            resource, subresource, D3D11_MAP.D3D11_MAP_READ, (uint)D3D11_MAP_FLAG.D3D11_MAP_FLAG_DO_NOT_WAIT, &mapped);
+        if (result == DXGI.DXGI_ERROR_WAS_STILL_DRAWING)
+            return null;
+        result.ThrowOnError();
+
+        try
+        {
+            var specs = new RawImageSpecification(desc, mapped.RowPitch);
+            var bytes = new Span<byte>(mapped.pData, checked((int)mapped.DepthPitch)).ToArray();
+            return (specs, bytes);
+        }
+        finally
+        {
+            context.Get()->Unmap(resource, subresource);
+        }
+    }
+
     private async Task<(RawImageSpecification Specification, byte[] RawData)> GetRawImageAsync(
         WrapAux wrapAux,
         TextureModificationArgs args = default,
         CancellationToken cancellationToken = default)
     {
+        using var readCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, this.disposeCts.Token);
+        cancellationToken = readCancellation.Token;
+        cancellationToken.ThrowIfCancellationRequested();
+
         using var tex2D =
             args.IsCompleteSourceCopy(wrapAux.Desc)
             ? wrapAux.NewTexRef()
             : await this.NoThrottleCreateFromExistingTextureAsync(wrapAux, args);
 
-        cancellationToken.ThrowIfCancellationRequested();
-
-        // ID3D11DeviceContext is not a threadsafe resource, and it must be used from the UI thread.
-        return await this.RunDuringPresent(() => ExtractMappedSubresource0(tex2D, cancellationToken));
-
-        static unsafe (RawImageSpecification Specification, byte[] RawData) ExtractMappedSubresource0(
-            ComPtr<ID3D11Texture2D> tex2D,
-            CancellationToken cancellationToken)
+        using var readback = await this.RunDuringPresent(() =>
         {
             cancellationToken.ThrowIfCancellationRequested();
-
-            var desc = tex2D.GetDesc();
-
-            using var device = default(ComPtr<ID3D11Device>);
-            tex2D.Get()->GetDevice(device.GetAddressOf());
-            using var context = default(ComPtr<ID3D11DeviceContext>);
-            device.Get()->GetImmediateContext(context.GetAddressOf());
-
-            using var tmpTex =
-                (desc.CPUAccessFlags & (uint)D3D11_CPU_ACCESS_FLAG.D3D11_CPU_ACCESS_READ) == 0
-                    ? device.CreateTexture2D(
-                        desc with
-                        {
-                            MipLevels = 1,
-                            ArraySize = 1,
-                            SampleDesc = new(1, 0),
-                            Usage = D3D11_USAGE.D3D11_USAGE_STAGING,
-                            BindFlags = 0u,
-                            CPUAccessFlags = (uint)D3D11_CPU_ACCESS_FLAG.D3D11_CPU_ACCESS_READ,
-                            MiscFlags = 0u,
-                        },
-                        tex2D)
-                    : default;
-            cancellationToken.ThrowIfCancellationRequested();
-
-            var mapWhat = (ID3D11Resource*)(tmpTex.IsEmpty() ? tex2D.Get() : tmpTex.Get());
-
-            D3D11_MAPPED_SUBRESOURCE mapped;
-            context.Get()->Map(mapWhat, 0, D3D11_MAP.D3D11_MAP_READ, 0, &mapped).ThrowOnError();
-
-            try
-            {
-                var specs = new RawImageSpecification(desc, mapped.RowPitch);
-                var bytes = new Span<byte>(mapped.pData, checked((int)mapped.DepthPitch)).ToArray();
-                return (specs, bytes);
-            }
-            finally
-            {
-                context.Get()->Unmap(mapWhat, 0);
-            }
-        }
+            return CreateReadbackTexture(tex2D, false);
+        });
+        return await this.ReadSubresourceAsync(readback, 0, readback.GetDesc(), cancellationToken);
     }
 
     private async Task<(int MipLevels, (RawImageSpecification Specification, byte[] RawData)[] Images)>
         GetAllRawImagesAsync(WrapAux wrapAux, CancellationToken cancellationToken = default)
     {
-        using var tex2D = wrapAux.NewTexRef();
-
+        using var readCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, this.disposeCts.Token);
+        cancellationToken = readCancellation.Token;
         cancellationToken.ThrowIfCancellationRequested();
 
-        // ID3D11DeviceContext is not a threadsafe resource, and it must be used from the UI thread.
-        return await this.RunDuringPresent(() => ExtractMappedResource(tex2D, cancellationToken));
-
-        static unsafe (int MipLevels, (RawImageSpecification Specification, byte[] RawData)[] Images)
-            ExtractMappedResource(ComPtr<ID3D11Texture2D> tex2D, CancellationToken cancellationToken)
+        using var tex2D = wrapAux.NewTexRef();
+        using var readback = await this.RunDuringPresent(() =>
         {
             cancellationToken.ThrowIfCancellationRequested();
+            return CreateReadbackTexture(tex2D, true);
+        });
+        var desc = readback.GetDesc();
+        var images = new (RawImageSpecification Specification, byte[] RawData)[desc.ArraySize * desc.MipLevels];
+        uint subresource = 0;
 
-            var desc = tex2D.GetDesc();
+        while (!await this.RunDuringPresent(TryReadImages))
+            await this.WaitForReadbackRetry(cancellationToken);
 
-            using var device = default(ComPtr<ID3D11Device>);
-            tex2D.Get()->GetDevice(device.GetAddressOf());
-            using var context = default(ComPtr<ID3D11DeviceContext>);
-            device.Get()->GetImmediateContext(context.GetAddressOf());
+        return ((int)desc.MipLevels, images);
 
-            using var tmpTex =
-                (desc.CPUAccessFlags & (uint)D3D11_CPU_ACCESS_FLAG.D3D11_CPU_ACCESS_READ) == 0
-                    ? device.CreateTexture2D(
-                        desc with
-                        {
-                            SampleDesc = new(1, 0),
-                            Usage = D3D11_USAGE.D3D11_USAGE_STAGING,
-                            BindFlags = 0u,
-                            CPUAccessFlags = (uint)D3D11_CPU_ACCESS_FLAG.D3D11_CPU_ACCESS_READ,
-                            MiscFlags = 0u,
-                        },
-                        tex2D)
-                    : default;
-
-            var mapWhat = (ID3D11Resource*)(tmpTex.IsEmpty() ? tex2D.Get() : tmpTex.Get());
-
-            var images = new (RawImageSpecification Specification, byte[] RawData)[desc.ArraySize * desc.MipLevels];
-            uint subresource = 0;
-
-            for (uint arraySlice = 0; arraySlice < desc.ArraySize; ++arraySlice)
+        bool TryReadImages()
+        {
+            for (; subresource < images.Length; ++subresource)
             {
-                for (uint mipSlice = 0, width = desc.Width, height = desc.Height;
-                     mipSlice < desc.MipLevels;
-                     ++mipSlice, ++subresource, width = Math.Max(width >> 1, 1), height = Math.Max(height >> 1, 1))
-                {
-                    cancellationToken.ThrowIfCancellationRequested();
-
-                    D3D11_MAPPED_SUBRESOURCE mapped;
-                    context.Get()->Map(mapWhat, subresource, D3D11_MAP.D3D11_MAP_READ, 0, &mapped).ThrowOnError();
-
-                    try
-                    {
-                        var specs = new RawImageSpecification(
-                            (int)width,
-                            (int)height,
-                            (int)desc.Format,
-                            (int)mapped.RowPitch);
-                        var bytes = new Span<byte>(mapped.pData, checked((int)mapped.DepthPitch)).ToArray();
-                        images[subresource] = (specs, bytes);
-                    }
-                    finally
-                    {
-                        context.Get()->Unmap(mapWhat, 0);
-                    }
-                }
+                var mip = (int)(subresource % desc.MipLevels);
+                var imageDesc = desc with { Width = Math.Max(desc.Width >> mip, 1), Height = Math.Max(desc.Height >> mip, 1) };
+                if (TryReadSubresource(readback, subresource, imageDesc, cancellationToken) is not { } image)
+                    return false;
+                images[subresource] = image;
             }
 
-            return ((int)desc.MipLevels, images);
+            return true;
+        }
+    }
+
+    private async Task WaitForReadbackRetry(CancellationToken cancellationToken)
+    {
+        var nextTick = this.framework.DelayTicks(1, cancellationToken);
+        if (nextTick.IsCompletedSuccessfully)
+            await Task.Delay(1, cancellationToken); // DelayTicks is a no-op before the first framework tick.
+        else
+            await nextTick;
+    }
+
+    private async Task<(RawImageSpecification Specification, byte[] RawData)> ReadSubresourceAsync(
+        ComPtr<ID3D11Texture2D> tex2D,
+        uint subresource,
+        D3D11_TEXTURE2D_DESC desc,
+        CancellationToken cancellationToken)
+    {
+        while (true)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var image = await this.RunDuringPresent(() => TryReadSubresource(tex2D, subresource, desc, cancellationToken));
+            if (image is { } ready)
+                return ready;
+
+            // Let Present submit the copy and the game advance instead of waiting on the GPU here.
+            await this.WaitForReadbackRetry(cancellationToken);
         }
     }
 
