@@ -247,48 +247,7 @@ internal abstract class FontHandle : IFontHandle
         if (this.Available)
             return Task.FromResult<IFontHandle>(this);
 
-        var tcs = new TaskCompletionSource<IFontHandle>(TaskCreationOptions.RunContinuationsAsynchronously);
-        cancellationToken.Register(() => tcs.TrySetCanceled());
-
-        this.ImFontChanged += OnImFontChanged;
-        this.Disposed += OnDisposed;
-        if (this.Available)
-            OnImFontChanged(this, null);
-        return tcs.Task;
-
-        void OnImFontChanged(IFontHandle unused, ILockedImFont? unused2)
-        {
-            if (tcs.Task.IsCompletedSuccessfully)
-                return;
-
-            this.ImFontChanged -= OnImFontChanged;
-            this.Disposed -= OnDisposed;
-            try
-            {
-                tcs.SetResult(this);
-            }
-            catch
-            {
-                // ignore
-            }
-        }
-
-        void OnDisposed()
-        {
-            if (tcs.Task.IsCompletedSuccessfully)
-                return;
-
-            this.ImFontChanged -= OnImFontChanged;
-            this.Disposed -= OnDisposed;
-            try
-            {
-                tcs.SetException(new ObjectDisposedException(nameof(GamePrebakedFontHandle)));
-            }
-            catch
-            {
-                // ignore
-            }
-        }
+        return this.WaitForFontAsync(cancellationToken);
     }
 
     /// <summary>
@@ -310,5 +269,27 @@ internal abstract class FontHandle : IFontHandle
             this.Disposed = null;
             this.ImFontChanged = null;
         }
+    }
+
+    private async Task<IFontHandle> WaitForFontAsync(CancellationToken cancellationToken)
+    {
+        var tcs = new TaskCompletionSource<IFontHandle>(TaskCreationOptions.RunContinuationsAsynchronously);
+        this.ImFontChanged += OnImFontChanged;
+        this.Disposed += OnDisposed;
+        try
+        {
+            if (this.Available)
+                tcs.TrySetResult(this);
+            return await tcs.Task.WaitAsync(cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            this.ImFontChanged -= OnImFontChanged;
+            this.Disposed -= OnDisposed;
+        }
+
+        void OnImFontChanged(IFontHandle unused, ILockedImFont? unused2) => tcs.TrySetResult(this);
+
+        void OnDisposed() => tcs.TrySetException(new ObjectDisposedException(nameof(GamePrebakedFontHandle)));
     }
 }
