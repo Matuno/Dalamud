@@ -144,6 +144,13 @@ public class SeString
         if (ptr == null)
             return Empty;
 
+        var data = new ReadOnlySpan<byte>(ptr, len);
+        if (data.IsEmpty)
+            return Empty;
+        // Preserve the byte cache even for invalid UTF-8, while avoiding the stream decoder for plain text.
+        if (data.IndexOf((byte)0x02) < 0)
+            return new SeString(new List<Payload> { Payload.DecodeText(data) });
+
         var payloads = new List<Payload>();
 
         using (var stream = new UnmanagedMemoryStream(ptr, len))
