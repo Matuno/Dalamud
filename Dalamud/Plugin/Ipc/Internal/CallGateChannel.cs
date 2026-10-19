@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
 using System.Reflection;
+using System.Runtime.CompilerServices;
 using System.Threading;
 
 using Dalamud.Plugin.Ipc.Exceptions;
@@ -20,6 +21,7 @@ internal class CallGateChannel
 {
     private readonly ThreadLocal<IpcContext> ipcExecutionContext = new();
     private readonly Lock subscriptionsLock = new();
+    private readonly ConditionalWeakTable<MethodInfo, ParameterInfo[]> parameterCache = new();
 
     /// <summary>
     /// The actual storage.
@@ -178,23 +180,25 @@ internal class CallGateChannel
 
     private void CheckAndConvertArgs(object?[]? args, MethodInfo methodInfo)
     {
-        var paramTypes = methodInfo.GetParameters()
-                                   .Select(pi => pi.ParameterType).ToArray();
+        // Zero-argument methods already return an empty cached array; avoid a table lookup for those calls.
+        var parameters = args is { Length: > 0 }
+                             ? this.parameterCache.GetValue(methodInfo, static method => method.GetParameters())
+                             : methodInfo.GetParameters();
 
         if (args is null)
         {
-            if (paramTypes.Length == 0)
+            if (parameters.Length == 0)
                 return;
-            throw new IpcLengthMismatchError(this.Name, 0, paramTypes.Length);
+            throw new IpcLengthMismatchError(this.Name, 0, parameters.Length);
         }
 
-        if (args.Length != paramTypes.Length)
-            throw new IpcLengthMismatchError(this.Name, args.Length, paramTypes.Length);
+        if (args.Length != parameters.Length)
+            throw new IpcLengthMismatchError(this.Name, args.Length, parameters.Length);
 
         for (var i = 0; i < args.Length; i++)
         {
             var arg = args[i];
-            var paramType = paramTypes[i];
+            var paramType = parameters[i].ParameterType;
 
             if (arg == null)
             {
@@ -212,9 +216,8 @@ internal class CallGateChannel
             var argType = arg.GetType();
             if (argType != paramType)
             {
-                // check the inheritance tree
-                var baseTypes = this.GenerateTypes(argType.BaseType);
-                if (baseTypes.Any(t => t == paramType))
+                // Keep the existing conversion behavior for object and interface destinations.
+                if (paramType != typeof(object) && argType.IsSubclassOf(paramType))
                 {
                     // The source type inherits from the destination type
                     continue;
@@ -222,15 +225,6 @@ internal class CallGateChannel
 
                 args[i] = this.ConvertObject(arg, paramType);
             }
-        }
-    }
-
-    private IEnumerable<Type> GenerateTypes(Type? type)
-    {
-        while (type != null && type != typeof(object))
-        {
-            yield return type;
-            type = type.BaseType;
         }
     }
 
