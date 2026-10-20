@@ -1,4 +1,3 @@
-using System.Linq;
 using System.Threading.Tasks;
 
 using Dalamud.Configuration.Internal;
@@ -227,18 +226,21 @@ internal sealed unsafe class ClientState : IInternalDisposableService, IClientSt
 
         var condition = Service<Conditions.Condition>.GetNullable();
 
-        var blockingConditions = condition.AsReadOnlySet().Except([
-            ConditionFlag.NormalConditions,
-            ConditionFlag.Emoting,
-            ConditionFlag.Jumping,
-            ConditionFlag.Mounted,
-            ConditionFlag.InFlight,
-            ConditionFlag.Swimming,
-            ConditionFlag.Diving,
-            ConditionFlag.UsingFashionAccessory,
-            ConditionFlag.OnFreeTrial]);
+        for (var i = 0; i < Conditions.Condition.MaxConditionEntries; i++)
+        {
+            if (!condition[i])
+                continue;
 
-        blockingFlag = blockingConditions.FirstOrDefault();
+            var flag = (ConditionFlag)i;
+            if (flag is ConditionFlag.NormalConditions or ConditionFlag.Emoting or ConditionFlag.Jumping
+                or ConditionFlag.Mounted or ConditionFlag.InFlight or ConditionFlag.Swimming
+                or ConditionFlag.Diving or ConditionFlag.UsingFashionAccessory or ConditionFlag.OnFreeTrial)
+                continue;
+
+            blockingFlag = flag;
+            break;
+        }
+
         return blockingFlag == 0;
     }
 
