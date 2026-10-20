@@ -1421,13 +1421,26 @@ internal class PluginInstallerWindow : Window, IDisposable
             return proxies;
         }
 
+        var categoryManifests = this.categoryManager.GetCurrentCategoryContent(filteredAvailableManifests);
+        var installedPluginsByName = installedPlugins.Count > 0 && categoryManifests.Count > installedPlugins.Count
+                                         ? this.pluginListInstalled.Where(plugin => !plugin.IsDev)
+                                               .ToLookup(plugin => plugin.Manifest.InternalName, StringComparer.Ordinal)
+                                         : null;
+
         // Go through all AVAILABLE manifests, associate them with a NON-DEV local plugin, if one is available, and remove it from the pile
-        foreach (var availableManifest in this.categoryManager.GetCurrentCategoryContent(filteredAvailableManifests).Cast<RemotePluginManifest>())
+        foreach (var availableManifest in categoryManifests.Cast<RemotePluginManifest>())
         {
-            var plugin = this.pluginListInstalled
-                             .FirstOrDefault(plugin => plugin.Manifest.InternalName == availableManifest.InternalName &&
-                                        (!availableManifest.SourceRepo.IsThirdParty || plugin.Manifest.InstalledFromUrl == availableManifest.SourceRepo.PluginMasterUrl) &&
-                                        !plugin.IsDev);
+            LocalPlugin? plugin = null;
+            foreach (var installedPlugin in installedPluginsByName?[availableManifest.InternalName] ?? this.pluginListInstalled)
+            {
+                if (installedPlugin.Manifest.InternalName == availableManifest.InternalName &&
+                    (!availableManifest.SourceRepo.IsThirdParty || installedPlugin.Manifest.InstalledFromUrl == availableManifest.SourceRepo.PluginMasterUrl) &&
+                    !installedPlugin.IsDev)
+                {
+                    plugin = installedPlugin;
+                    break;
+                }
+            }
 
             // We "consumed" this plugin from the pile and remove it.
             if (plugin != null)
