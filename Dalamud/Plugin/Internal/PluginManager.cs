@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.IO;
 using System.IO.Compression;
@@ -76,6 +77,7 @@ internal class PluginManager : IInternalDisposableService
     [ServiceManager.ServiceDependency]
     private readonly HappyHttpClient happyHttpClient = Service<HappyHttpClient>.Get();
 
+    private ReadOnlyCollection<IExposedPlugin>? exposedInstalledPlugins;
     private Task? repoRefreshTask;
 
     static PluginManager()
@@ -189,6 +191,18 @@ internal class PluginManager : IInternalDisposableService
         {
             using (this.pluginListLock.EnterScope())
                 return this.installedPluginsList.ToList();
+        }
+    }
+
+    /// <summary>
+    /// Gets a read-only membership snapshot whose wrappers reflect current plugin state.
+    /// </summary>
+    public IEnumerable<IExposedPlugin> ExposedInstalledPlugins
+    {
+        get
+        {
+            using (this.pluginListLock.EnterScope())
+                return this.exposedInstalledPlugins ??= this.installedPluginsList.Select(p => (IExposedPlugin)new ExposedPlugin(p)).ToList().AsReadOnly();
         }
     }
 
@@ -831,7 +845,10 @@ internal class PluginManager : IInternalDisposableService
             throw new InvalidPluginOperationException($"Unable to remove {plugin.Name}, not unloaded and had loaded before");
 
         using (this.pluginListLock.EnterScope())
+        {
             this.installedPluginsList.Remove(plugin);
+            this.exposedInstalledPlugins = null;
+        }
 
         this.NotifyInstalledPluginsChanged();
         this.NotifyAvailablePluginsChanged();
@@ -1588,10 +1605,13 @@ internal class PluginManager : IInternalDisposableService
                 if (!this.installedPluginsList.Remove(pluginToReplace))
                     throw new InvalidOperationException("Failed to remove plugin that is being replaced");
 
+                this.exposedInstalledPlugins = null;
+
                 Log.Verbose("Removed plugin {Name} v{Version} from loaded plugins list", pluginToReplace.InternalName, pluginToReplace.EffectiveVersion);
             }
 
             this.installedPluginsList.Add(plugin);
+            this.exposedInstalledPlugins = null;
             this.NotifyInstalledPluginsChanged();
 
             Log.Verbose("Added plugin {Name} v{Version} to loaded plugins list", manifest.InternalName, manifest.AssemblyVersion);

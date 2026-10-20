@@ -171,7 +171,7 @@ internal sealed class DalamudPluginInterface : IDalamudPluginInterface, IDisposa
 
     /// <inheritdoc/>
     public IEnumerable<IExposedPlugin> InstalledPlugins =>
-        Service<PluginManager>.Get().InstalledPlugins.Select(p => new ExposedPlugin(p));
+        Service<PluginManager>.Get().ExposedInstalledPlugins;
 
     /// <summary>
     /// Gets the <see cref="UiBuilder"/> internal implementation.
