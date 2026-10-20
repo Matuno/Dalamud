@@ -4108,20 +4108,26 @@ internal class PluginInstallerWindow : Window, IDisposable
     {
         var searchString = this.searchText.ToLowerInvariant();
         var matcher = new FuzzyMatcher(searchString, MatchMode.FuzzyParts);
-        var scores = new List<int> { 0 };
+        var score = 0;
 
         if (!manifest.Name.IsNullOrEmpty())
-            scores.Add(matcher.Matches(manifest.Name.ToLowerInvariant()) * 110);
+            score = int.Max(score, matcher.Matches(manifest.Name.ToLowerInvariant()) * 110);
         if (!manifest.InternalName.IsNullOrEmpty())
-            scores.Add(matcher.Matches(manifest.InternalName.ToLowerInvariant()) * 105);
+            score = int.Max(score, matcher.Matches(manifest.InternalName.ToLowerInvariant()) * 105);
         if (!manifest.Author.IsNullOrEmpty())
-            scores.Add(matcher.Matches(manifest.Author.ToLowerInvariant()) * 100);
+            score = int.Max(score, matcher.Matches(manifest.Author.ToLowerInvariant()) * 100);
         if (!manifest.Punchline.IsNullOrEmpty())
-            scores.Add(matcher.Matches(manifest.Punchline.ToLowerInvariant()) * 100);
+            score = int.Max(score, matcher.Matches(manifest.Punchline.ToLowerInvariant()) * 100);
         if (manifest.Tags != null)
-            scores.Add(matcher.MatchesAny(manifest.Tags.Select(tag => tag.ToLowerInvariant()).ToArray()) * 100);
+        {
+            var tagScore = 0;
+            foreach (var tag in manifest.Tags)
+                tagScore = int.Max(tagScore, matcher.Matches(tag.ToLowerInvariant()));
 
-        return scores.Max();
+            score = int.Max(score, tagScore * 100);
+        }
+
+        return score;
     }
 
     private (bool IsInstalled, LocalPlugin Plugin) IsManifestInstalled(IPluginManifest? manifest)

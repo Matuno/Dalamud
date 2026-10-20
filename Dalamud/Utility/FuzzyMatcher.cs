@@ -42,6 +42,9 @@ internal readonly ref struct FuzzyMatcher
 
     private static (int Start, int End)[] FindNeedleSegments(ReadOnlySpan<char> span)
     {
+        if (span.IndexOfAny(' ', '\u3000') < 0)
+            return EmptySegArray;
+
         var segments = new List<(int, int)>();
         var wordStart = -1;
 
