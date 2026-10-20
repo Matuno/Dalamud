@@ -145,11 +145,10 @@ internal sealed class ChangelogWindow : Window, IDisposable
     public static bool WarrantsChangelog()
     {
         var configuration = Service<DalamudConfiguration>.Get();
-        var pm = Service<PluginManager>.GetNullable();
-        var pmWantsChangelog = pm?.InstalledPlugins.Any() ?? true;
         return (string.IsNullOrEmpty(configuration.LastChangelogMajorMinor) ||
                 (!WarrantsChangelogForMajorMinor.StartsWith(configuration.LastChangelogMajorMinor) &&
-                 Versioning.GetAssemblyVersion().StartsWith(WarrantsChangelogForMajorMinor))) && pmWantsChangelog;
+                 Versioning.GetAssemblyVersion().StartsWith(WarrantsChangelogForMajorMinor))) &&
+               (Service<PluginManager>.GetNullable()?.InstalledPlugins.Any() ?? true);
     }
 
     /// <inheritdoc/>
