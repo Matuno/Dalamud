@@ -95,8 +95,9 @@ public abstract partial class Payload
     /// <returns>The decoded text payload.</returns>
     internal static TextPayload DecodeText(ReadOnlySpan<byte> data)
     {
-        var payload = new TextPayload(Encoding.UTF8.GetString(data));
-        payload.encodedData = data.ToArray();
+        var bytes = data.ToArray();
+        var payload = new TextPayload(Encoding.UTF8.GetString(bytes));
+        payload.encodedData = bytes;
         payload.Dirty = false;
         return payload;
     }
