@@ -169,6 +169,10 @@ internal unsafe class AddonLifecycle : IInternalDisposableService
                 }
             }
 
+            // An empty addon name also matches the global key below.
+            if (globalListeners is not null && addonListeners.Count == 1 && !args.AddonNameSpan.IsEmpty)
+                return;
+
             // Handle listeners that are listening for this addon and event type specifically
             Span<char> nameBuffer = stackalloc char[32];
             var nameLength = Encoding.UTF8.GetChars(args.AddonNameSpan, nameBuffer);

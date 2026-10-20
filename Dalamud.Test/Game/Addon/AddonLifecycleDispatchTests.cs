@@ -2,9 +2,14 @@ using System;
 using System.Collections.Generic;
 using System.Reflection;
 using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
+using System.Text;
 
 using Dalamud.Game.Addon.Lifecycle;
 using Dalamud.Game.Addon.Lifecycle.AddonArgTypes;
+using Dalamud.Game.NativeWrapper;
+
+using FFXIVClientStructs.FFXIV.Component.GUI;
 
 using Xunit;
 
@@ -95,6 +100,47 @@ public class AddonLifecycleDispatchTests
         unregister(global);
         register(first);
         Assert.Same(first, Assert.Single(lifecycle.EventListeners[AddonEvent.PreDraw]["Fixture"]));
+    }
+
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(true, false)]
+    [InlineData(true, true)]
+    public void GlobalAndSpecificCallbacksKeepTheirOrder(bool hasName, bool hasSpecific)
+    {
+        var size = Unsafe.SizeOf<AtkUnitBase>();
+        var nameOffset = typeof(AtkUnitBase).GetField("_name", BindingFlags.Instance | BindingFlags.NonPublic)!
+            .GetCustomAttribute<FieldOffsetAttribute>()!.Value;
+        Assert.InRange(nameOffset, 0, size - 32);
+        var native = Marshal.AllocHGlobal(size);
+        try
+        {
+            // This buffer belongs to the test; it is never a game object.
+            Marshal.Copy(new byte[size], 0, native, size);
+            if (hasName)
+            {
+                var name = Encoding.UTF8.GetBytes("Fixture\0");
+                Marshal.Copy(name, 0, native + nameOffset, name.Length);
+            }
+
+            var lifecycle = Create(false);
+            var calls = new List<string>();
+            lifecycle.EventListeners[AddonEvent.PreDraw] = new()
+            {
+                [string.Empty] = [new(AddonEvent.PreDraw, string.Empty, (_, _) => calls.Add("global"))],
+            };
+            if (hasSpecific)
+                lifecycle.EventListeners[AddonEvent.PreDraw]["Fixture"] = [new(AddonEvent.PreDraw, "Fixture", (_, _) => calls.Add("specific"))];
+
+            lifecycle.InvokeListenersSafely(AddonEvent.PreDraw, new AddonArgs { Addon = new AtkUnitBasePtr(native) });
+            var expected = !hasName ? new[] { "global", "global" } : hasSpecific ? new[] { "global", "specific" } : new[] { "global" };
+            Assert.Equal(expected, calls);
+            Assert.Equal(false, InvokingField.GetValue(lifecycle));
+        }
+        finally
+        {
+            Marshal.FreeHGlobal(native);
+        }
     }
 
     private static AddonLifecycle Create(bool wasInvoking)
