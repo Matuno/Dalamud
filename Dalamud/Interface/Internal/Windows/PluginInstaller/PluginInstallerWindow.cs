@@ -2231,6 +2231,21 @@ internal class PluginInstallerWindow : Window, IDisposable
         return ready;
     }
 
+    private bool TrySkipClosedPluginHeader(int index)
+    {
+        if (this.openPluginCollapsibles.Contains(index) || ImGui.GetIO().NavActive)
+            return false;
+
+        var size = new Vector2(ImGui.GetContentRegionAvail().X, ImGuiHelpers.GlobalScale * 66);
+        if (ImGui.IsRectVisible(new Vector2(size.X, size.Y + ImGui.GetStyle().ItemSpacing.Y + 1)))
+            return false;
+
+        ImGui.Separator();
+        // EndChild rounds the fixed height down before advancing the parent layout.
+        ImGui.Dummy(new Vector2(size.X, MathF.Floor(size.Y)));
+        return true;
+    }
+
     private bool DrawPluginCollapsingHeader(string label, LocalPlugin? plugin, IPluginManifest manifest, PluginHeaderFlags flags, Action drawContextMenuAction, int index)
     {
         var isOpen = this.openPluginCollapsibles.Contains(index);
@@ -2655,15 +2670,6 @@ internal class PluginInstallerWindow : Window, IDisposable
 
         var canUseTesting = pluginManager.CanUseTesting(manifest);
         var useTesting = pluginManager.UseTesting(manifest);
-        var wasSeen = this.WasPluginSeen(manifest.InternalName);
-
-        var isOutdated = this.IsAvailableManifestOutdated(manifest, useTesting);
-        var isIncompatible = this.IsAvailableManifestIncompatible(manifest);
-
-        var enableInstallButton = this.updateStatus != OperationStatus.InProgress &&
-                                  this.installStatus != OperationStatus.InProgress &&
-                                  !isOutdated &&
-                                  !isIncompatible;
 
         // Check for valid versions
         if ((useTesting && manifest.TestingAssemblyVersion == null) || manifest.AssemblyVersion == null)
@@ -2671,6 +2677,18 @@ internal class PluginInstallerWindow : Window, IDisposable
             // Without a valid version, quit
             return;
         }
+
+        if (this.TrySkipClosedPluginHeader(index))
+            return;
+
+        var wasSeen = this.WasPluginSeen(manifest.InternalName);
+        var isOutdated = this.IsAvailableManifestOutdated(manifest, useTesting);
+        var isIncompatible = this.IsAvailableManifestIncompatible(manifest);
+
+        var enableInstallButton = this.updateStatus != OperationStatus.InProgress &&
+                                  this.installStatus != OperationStatus.InProgress &&
+                                  !isOutdated &&
+                                  !isIncompatible;
 
         // Name
         var label = manifest.Name;
@@ -2860,6 +2878,9 @@ internal class PluginInstallerWindow : Window, IDisposable
 
     private void DrawInstalledPlugin(LocalPlugin plugin, int index, RemotePluginManifest? remoteManifest, AvailablePluginUpdate? availablePluginUpdate, bool showInstalled)
     {
+        if (this.TrySkipClosedPluginHeader(index))
+            return;
+
         var configuration = Service<DalamudConfiguration>.Get();
         var commandManager = Service<CommandManager>.Get();
 
