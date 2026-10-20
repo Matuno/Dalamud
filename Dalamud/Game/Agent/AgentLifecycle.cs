@@ -169,48 +169,53 @@ internal unsafe class AgentLifecycle : IInternalDisposableService
     /// <param name="blame">What to blame on errors.</param>
     internal void InvokeListenersSafely(AgentEvent eventType, AgentArgs args, [CallerMemberName] string blame = "")
     {
-        this.isInvokingListeners = true;
-
         // Early return if we don't have any listeners of this type
         if (!this.EventListeners.TryGetValue(eventType, out var agentListeners)) return;
 
-        // Handle listeners for this event type that don't care which agent is triggering it
-        if (agentListeners.TryGetValue((AgentId)uint.MaxValue, out var globalListeners))
+        var wasInvokingListeners = this.isInvokingListeners;
+        this.isInvokingListeners = true;
+        try
         {
-            foreach (var listener in globalListeners)
+            // Handle listeners for this event type that don't care which agent is triggering it
+            if (agentListeners.TryGetValue((AgentId)uint.MaxValue, out var globalListeners))
             {
-                if (listener.IsRequestedToClear) continue;
+                foreach (var listener in globalListeners)
+                {
+                    if (listener.IsRequestedToClear) continue;
 
-                try
-                {
-                    listener.FunctionDelegate.Invoke(eventType, args);
+                    try
+                    {
+                        listener.FunctionDelegate.Invoke(eventType, args);
+                    }
+                    catch (Exception e)
+                    {
+                        Log.Error(e, $"Exception in {blame} during {eventType} invoke, for global agent event listener.");
+                    }
                 }
-                catch (Exception e)
+            }
+
+            // Handle listeners that are listening for this agent and event type specifically
+            if (agentListeners.TryGetValue(args.AgentId, out var agentListener))
+            {
+                foreach (var listener in agentListener)
                 {
-                    Log.Error(e, $"Exception in {blame} during {eventType} invoke, for global agent event listener.");
+                    if (listener.IsRequestedToClear) continue;
+
+                    try
+                    {
+                        listener.FunctionDelegate.Invoke(eventType, args);
+                    }
+                    catch (Exception e)
+                    {
+                        Log.Error(e, $"Exception in {blame} during {eventType} invoke, for specific agent {args.AgentId}.");
+                    }
                 }
             }
         }
-
-        // Handle listeners that are listening for this agent and event type specifically
-        if (agentListeners.TryGetValue(args.AgentId, out var agentListener))
+        finally
         {
-            foreach (var listener in agentListener)
-            {
-                if (listener.IsRequestedToClear) continue;
-
-                try
-                {
-                    listener.FunctionDelegate.Invoke(eventType, args);
-                }
-                catch (Exception e)
-                {
-                    Log.Error(e, $"Exception in {blame} during {eventType} invoke, for specific agent {args.AgentId}.");
-                }
-            }
+            this.isInvokingListeners = wasInvokingListeners;
         }
-
-        this.isInvokingListeners = false;
     }
 
     private AgentModule* OnAgentModuleInitialize(AgentModule* thisPtr, UIModule* uiModule)
