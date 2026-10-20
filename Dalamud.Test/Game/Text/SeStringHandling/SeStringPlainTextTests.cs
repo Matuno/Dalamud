@@ -44,6 +44,48 @@ public class SeStringPlainTextTests
     }
 
     [Fact]
+    public void MixedTextFragmentsMatchExistingStreamDecoder()
+    {
+        byte[][] chunks = [new UIForegroundPayload(17).Encode(), new UIGlowPayload(4).Encode(), new EmphasisItalicPayload(true).Encode(), NewLinePayload.Payload.Encode()];
+        var random = new Random(20261020);
+        for (var sample = 0; sample < 200; sample++)
+        {
+            var message = new List<byte>();
+            for (var part = 0; part < 8; part++)
+            {
+                var text = new byte[random.Next(0, 100)];
+                random.NextBytes(text);
+                for (var i = 0; i < text.Length; i++)
+                    if (text[i] is 0 or 2)
+                        text[i] = 3;
+                message.AddRange(text);
+                if (part < 7)
+                    message.AddRange(chunks[random.Next(chunks.Length)]);
+            }
+
+            CompareToStreamDecoder(message.ToArray());
+        }
+    }
+
+    [Fact]
+    public void MixedTextFragmentsOwnTheirCaches()
+    {
+        byte[] bytes = [0xFF, (byte)'A', ..new UIForegroundPayload(17).Encode(), 0xC0, 0xAF];
+        var original = (byte[])bytes.Clone();
+        var first = SeString.Parse(bytes);
+        var second = SeString.Parse(bytes);
+        Array.Clear(bytes);
+        Assert.Equal(original, first.Encode());
+        var text = Assert.IsType<TextPayload>(first.Payloads[0]);
+        Assert.False(text.Dirty);
+        text.Text = "edited";
+        Assert.True(text.Dirty);
+        Assert.Equal(Encoding.UTF8.GetBytes("edited"), text.Encode());
+        Assert.Equal(original, second.Encode());
+        Assert.NotSame(first.Payloads[0], second.Payloads[0]);
+    }
+
+    [Fact]
     public void ParsedTextOwnsItsBytesAndReencodesEdits()
     {
         var bytes = new byte[] { 0xFF, (byte)'A', 0xC0, 0xAF };

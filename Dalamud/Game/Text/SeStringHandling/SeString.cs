@@ -158,7 +158,18 @@ public class SeString
         {
             while (stream.Position < len)
             {
-                payloads.Add(Payload.Decode(reader));
+                if (data[(int)stream.Position] == 0x02)
+                {
+                    payloads.Add(Payload.Decode(reader));
+                    continue;
+                }
+
+                var remaining = data[(int)stream.Position..];
+                var textLength = remaining.IndexOf((byte)0x02);
+                if (textLength < 0)
+                    textLength = remaining.Length;
+                payloads.Add(Payload.DecodeText(remaining[..textLength]));
+                stream.Position += textLength;
             }
         }
 
