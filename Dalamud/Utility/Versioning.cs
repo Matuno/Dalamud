@@ -8,6 +8,9 @@ namespace Dalamud.Utility;
 /// </summary>
 internal static class Versioning
 {
+    private static readonly Version AssemblyVersion = typeof(Versioning).Assembly.GetName().Version!;
+    private static readonly string AssemblyVersionString = AssemblyVersion.ToString();
+
     private static string? scmVersionInternal;
     private static string? gitHashInternal;
     private static string? gitHashClientStructsInternal;
@@ -18,14 +21,14 @@ internal static class Versioning
     /// </summary>
     /// <returns>The raw Dalamud assembly version.</returns>
     internal static string GetAssemblyVersion() =>
-        Assembly.GetAssembly(typeof(Versioning))!.GetName().Version!.ToString();
+        AssemblyVersionString;
 
     /// <summary>
     /// Gets the Dalamud version.
     /// </summary>
     /// <returns>The parsed Dalamud assembly version.</returns>
     internal static Version GetAssemblyVersionParsed() =>
-        Assembly.GetAssembly(typeof(Versioning))!.GetName().Version!;
+        AssemblyVersion;
 
     /// <summary>
     /// Gets the SCM Version from the assembly, or null if it cannot be found. This method will generally return
