@@ -1,4 +1,3 @@
-using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using System.IO;
 using System.Text;
@@ -430,21 +429,22 @@ public abstract partial class Payload
             return [(byte)(value + 1)];
         }
 
-        var bytes = BitConverter.GetBytes(value);
-
-        var ret = new List<byte>() { 0xF0 };
+        Span<byte> ret = stackalloc byte[5];
+        ret[0] = 0xF0;
+        var length = 1;
         for (var i = 3; i >= 0; i--)
         {
-            if (bytes[i] != 0)
+            var current = (byte)(value >> (i * 8));
+            if (current != 0)
             {
-                ret.Add(bytes[i]);
+                ret[length++] = current;
                 ret[0] |= (byte)(1 << i);
             }
         }
 
         ret[0] -= 1;
 
-        return ret.ToArray();
+        return ret[..length].ToArray();
     }
 
     /// <summary>
