@@ -9,8 +9,6 @@ using System.Numerics;
 using System.Threading;
 using System.Threading.Tasks;
 
-using CheapLoc;
-
 using Dalamud.Bindings.ImGui;
 using Dalamud.Configuration.Internal;
 using Dalamud.Console;
@@ -35,6 +33,8 @@ using Dalamud.Plugin.Internal.Types;
 using Dalamud.Plugin.Internal.Types.Manifest;
 using Dalamud.Support;
 using Dalamud.Utility;
+
+using Loc = Dalamud.CoreLocalization;
 
 namespace Dalamud.Interface.Internal.Windows.PluginInstaller;
 

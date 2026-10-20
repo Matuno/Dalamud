@@ -2,10 +2,10 @@ using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using System.Linq;
 
-using CheapLoc;
-
 using Dalamud.Plugin.Internal.Types;
 using Dalamud.Plugin.Internal.Types.Manifest;
+
+using Loc = Dalamud.CoreLocalization;
 
 namespace Dalamud.Interface.Internal;
 
