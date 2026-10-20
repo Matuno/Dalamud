@@ -67,6 +67,36 @@ public class AddonLifecycleDispatchTests
         Assert.Equal(false, InvokingField.GetValue(lifecycle));
     }
 
+    [Fact]
+    public void UnregistrationDropsOnlyEmptyBuckets()
+    {
+        var lifecycle = Create(false);
+        var register = typeof(AddonLifecycle).GetMethod("RegisterListenerMethod", BindingFlags.Instance | BindingFlags.NonPublic)!
+            .CreateDelegate<Action<AddonLifecycleEventListener>>(lifecycle);
+        var unregister = typeof(AddonLifecycle).GetMethod("UnregisterListenerMethod", BindingFlags.Instance | BindingFlags.NonPublic)!
+            .CreateDelegate<Action<AddonLifecycleEventListener>>(lifecycle);
+        var first = new AddonLifecycleEventListener(AddonEvent.PreDraw, "Fixture", (_, _) => { });
+        var second = new AddonLifecycleEventListener(AddonEvent.PreDraw, "Fixture", (_, _) => { });
+        var global = new AddonLifecycleEventListener(AddonEvent.PreDraw, string.Empty, (_, _) => { });
+        var other = new AddonLifecycleEventListener(AddonEvent.PostDraw, "Other", (_, _) => { });
+        register(first);
+        register(second);
+        register(global);
+        register(other);
+
+        unregister(first);
+        Assert.Same(second, Assert.Single(lifecycle.EventListeners[AddonEvent.PreDraw]["Fixture"]));
+        unregister(second);
+        Assert.False(lifecycle.EventListeners[AddonEvent.PreDraw].ContainsKey("Fixture"));
+        Assert.Same(global, Assert.Single(lifecycle.EventListeners[AddonEvent.PreDraw][string.Empty]));
+        unregister(global);
+        Assert.False(lifecycle.EventListeners.ContainsKey(AddonEvent.PreDraw));
+        Assert.True(lifecycle.EventListeners.ContainsKey(AddonEvent.PostDraw));
+        unregister(global);
+        register(first);
+        Assert.Same(first, Assert.Single(lifecycle.EventListeners[AddonEvent.PreDraw]["Fixture"]));
+    }
+
     private static AddonLifecycle Create(bool wasInvoking)
     {
         // Skip the native hook and framework-service constructor.

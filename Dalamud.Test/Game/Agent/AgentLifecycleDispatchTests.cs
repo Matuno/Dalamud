@@ -62,6 +62,36 @@ public class AgentLifecycleDispatchTests
         Assert.Equal(false, InvokingField.GetValue(lifecycle));
     }
 
+    [Fact]
+    public void UnregistrationDropsOnlyEmptyBuckets()
+    {
+        var lifecycle = Create(false);
+        var register = typeof(AgentLifecycle).GetMethod("RegisterListenerMethod", BindingFlags.Instance | BindingFlags.NonPublic)!
+            .CreateDelegate<Action<AgentLifecycleEventListener>>(lifecycle);
+        var unregister = typeof(AgentLifecycle).GetMethod("UnregisterListenerMethod", BindingFlags.Instance | BindingFlags.NonPublic)!
+            .CreateDelegate<Action<AgentLifecycleEventListener>>(lifecycle);
+        var first = new AgentLifecycleEventListener(AgentEvent.PreUpdate, (AgentId)1, (_, _) => { });
+        var second = new AgentLifecycleEventListener(AgentEvent.PreUpdate, (AgentId)1, (_, _) => { });
+        var global = new AgentLifecycleEventListener(AgentEvent.PreUpdate, (AgentId)uint.MaxValue, (_, _) => { });
+        var other = new AgentLifecycleEventListener(AgentEvent.PostUpdate, (AgentId)2, (_, _) => { });
+        register(first);
+        register(second);
+        register(global);
+        register(other);
+
+        unregister(first);
+        Assert.Same(second, Assert.Single(lifecycle.EventListeners[AgentEvent.PreUpdate][(AgentId)1]));
+        unregister(second);
+        Assert.False(lifecycle.EventListeners[AgentEvent.PreUpdate].ContainsKey((AgentId)1));
+        Assert.Same(global, Assert.Single(lifecycle.EventListeners[AgentEvent.PreUpdate][(AgentId)uint.MaxValue]));
+        unregister(global);
+        Assert.False(lifecycle.EventListeners.ContainsKey(AgentEvent.PreUpdate));
+        Assert.True(lifecycle.EventListeners.ContainsKey(AgentEvent.PostUpdate));
+        unregister(global);
+        register(first);
+        Assert.Same(first, Assert.Single(lifecycle.EventListeners[AgentEvent.PreUpdate][(AgentId)1]));
+    }
+
     private static AgentLifecycle Create(bool wasInvoking)
     {
         // Skip native agent hooks and the framework-service constructor.

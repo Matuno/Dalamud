@@ -224,7 +224,12 @@ internal unsafe class AddonLifecycle : IInternalDisposableService
             if (addonListeners.TryGetValue(listener.AddonName, out var addonListener))
             {
                 addonListener.Remove(listener);
+                if (addonListener.Count == 0)
+                    addonListeners.Remove(listener.AddonName);
             }
+
+            if (addonListeners.Count == 0)
+                this.EventListeners.Remove(listener.EventType);
         }
     }
 

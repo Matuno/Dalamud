@@ -267,7 +267,12 @@ internal unsafe class AgentLifecycle : IInternalDisposableService
             if (agentListeners.TryGetValue(listener.AgentId, out var agentListener))
             {
                 agentListener.Remove(listener);
+                if (agentListener.Count == 0)
+                    agentListeners.Remove(listener.AgentId);
             }
+
+            if (agentListeners.Count == 0)
+                this.EventListeners.Remove(listener.EventType);
         }
     }
 
